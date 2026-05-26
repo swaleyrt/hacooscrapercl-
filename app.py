@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect
 import sqlite3, secrets
 
 app = Flask(__name__)
@@ -9,6 +9,10 @@ def init_db():
     conn = sqlite3.connect("keys.db")
     conn.execute("""CREATE TABLE IF NOT EXISTS keys (
         key TEXT PRIMARY KEY,
+        used INTEGER DEFAULT 0
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
         used INTEGER DEFAULT 0
     )""")
     conn.commit()
@@ -22,11 +26,38 @@ def generate():
     if token != SECRET_TOKEN:
         return "❌ Accès refusé.", 403
 
-    key = "-".join([secrets.token_hex(2).upper() for _ in range(4)])
+    # Créer une session unique et rediriger vers elle
+    session_id = secrets.token_hex(32)
     conn = sqlite3.connect("keys.db")
+    conn.execute("INSERT INTO sessions (session_id) VALUES (?)", (session_id,))
+    conn.commit()
+    conn.close()
+
+    return redirect(f"/claim/{session_id}")
+
+@app.route("/claim/<session_id>")
+def claim(session_id):
+    conn = sqlite3.connect("keys.db")
+    row = conn.execute(
+        "SELECT used FROM sessions WHERE session_id=?", (session_id,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return "❌ Lien invalide.", 403
+    if row[0] == 1:
+        conn.close()
+        return "❌ Ce lien a déjà été utilisé.", 403
+
+    # Marquer la session comme utilisée
+    conn.execute("UPDATE sessions SET used=1 WHERE session_id=?", (session_id,))
+
+    # Générer la clé
+    key = "-".join([secrets.token_hex(2).upper() for _ in range(4)])
     conn.execute("INSERT INTO keys (key) VALUES (?)", (key,))
     conn.commit()
     conn.close()
+
     return render_template_string(PAGE, key=key)
 
 @app.route("/validate", methods=["POST"])
