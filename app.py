@@ -3,6 +3,8 @@ import sqlite3, secrets
 
 app = Flask(__name__)
 
+SECRET_TOKEN = "hacooscrapercle"
+
 def init_db():
     conn = sqlite3.connect("keys.db")
     conn.execute("""CREATE TABLE IF NOT EXISTS keys (
@@ -16,6 +18,10 @@ init_db()
 
 @app.route("/generate")
 def generate():
+    token = request.args.get("token", "")
+    if token != SECRET_TOKEN:
+        return "❌ Accès refusé.", 403
+
     key = "-".join([secrets.token_hex(2).upper() for _ in range(4)])
     conn = sqlite3.connect("keys.db")
     conn.execute("INSERT INTO keys (key) VALUES (?)", (key,))
@@ -67,7 +73,7 @@ PAGE = """
     <h1>🔐 Accès Discord</h1>
     <p>Ta clé valable <strong>8 heures</strong> :</p>
     <div class="key-box">
-      <div class="key-value" id="k">{{ key }}</div>
+      <div class="key-value">{{ key }}</div>
     </div>
     <button class="copy-btn" onclick="navigator.clipboard.writeText('{{ key }}');this.textContent='✅ Copié !'">
       📋 Copier
